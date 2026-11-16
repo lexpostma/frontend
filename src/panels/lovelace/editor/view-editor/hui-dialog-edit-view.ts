@@ -19,7 +19,6 @@ import "../../../../components/ha-dialog-footer";
 import "../../../../components/ha-dialog";
 import "../../../../components/ha-dropdown";
 import "../../../../components/ha-dropdown-item";
-import "../../../../components/ha-spinner";
 import "../../../../components/ha-tab-group";
 import "../../../../components/ha-tab-group-tab";
 import "../../../../components/ha-yaml-editor";
@@ -320,7 +319,6 @@ export class HuiDialogEditView extends DirtyStateProviderMixin<LovelaceViewConfi
               : nothing
           }
           <ha-button
-            class="save"
             slot="primaryAction"
             ?disabled=${
               !this._config ||
@@ -331,17 +329,10 @@ export class HuiDialogEditView extends DirtyStateProviderMixin<LovelaceViewConfi
               convertNotSupported
             }
             @click=${this._save}
+            .loading=${this._saving}
           >
-            ${
-              this._saving
-                ? html`<ha-spinner
-                    size="small"
-                    aria-label="Saving"
-                  ></ha-spinner>`
-                : nothing
-            }
-            ${this.hass!.localize("ui.common.save")}</ha-button
-          >
+            ${this.hass!.localize("ui.common.save")}
+          </ha-button>
         </ha-dialog-footer>
       </ha-dialog>
     `;
@@ -708,15 +699,6 @@ export class HuiDialogEditView extends DirtyStateProviderMixin<LovelaceViewConfi
         }
         ha-alert ha-button {
           display: block;
-        }
-        ha-button.save {
-          position: relative;
-        }
-        .save ha-spinner {
-          position: absolute;
-          top: 50%;
-          left: 50%;
-          transform: translate(-50%, -50%);
         }
       `,
     ];
