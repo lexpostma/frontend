@@ -1,11 +1,10 @@
+import type { ContextType } from "@lit/context";
 import { mdiFilterVariantRemove } from "@mdi/js";
 import type { CSSResultGroup } from "lit";
 import { css, html, LitElement, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators";
 import { ifDefined } from "lit/directives/if-defined";
 import { createRef, ref } from "lit/directives/ref";
-import { consumeLocalize } from "../common/decorators/consume-context-entry";
-import type { LocalizeFunc } from "../common/translations/localize";
 import {
   FilterPanelController,
   filterPanelStyles,
@@ -15,6 +14,8 @@ import type {
   HASSDomEvent,
 } from "../common/dom/fire_event";
 import { fireEvent } from "../common/dom/fire_event";
+import { consume } from "../common/decorators/consume";
+import { internationalizationContext } from "../data/context";
 import type { ListFilterValue } from "../data/data_table_filters";
 import {
   listFilterEventValue,
@@ -32,7 +33,6 @@ import {
 import "./ha-icon";
 import "./ha-icon-button";
 import "./ha-svg-icon";
-import "./ha-tree-indicator";
 import "./item/ha-list-item-option";
 import type { HaListItemOption } from "./item/ha-list-item-option";
 import "./list/ha-list-selectable";
@@ -47,28 +47,11 @@ export interface FilterStateOption {
   iconPath?: string;
 }
 
-/**
- * Two opposite options, like available and unavailable, listed under a row
- * that ticks or unticks both. The row is partly ticked when one of the two is.
- */
-export interface FilterStatePair {
-  /** Identifies the row, apart from the values of its options */
-  value: string;
-  label: string;
-  iconPath?: string;
-  options: [FilterStateOption, FilterStateOption];
-}
-
-export type FilterStateItem = FilterStateOption | FilterStatePair;
-
-const isPair = (item: FilterStateItem): item is FilterStatePair =>
-  "options" in item;
-
 @customElement("ha-filter-states")
 export class HaFilterStates extends LitElement {
   @state()
-  @consumeLocalize()
-  protected _localize!: LocalizeFunc;
+  @consume({ context: internationalizationContext, subscribe: true })
+  protected _i18n!: ContextType<typeof internationalizationContext>;
 
   @property() public label?: string;
 
@@ -87,7 +70,7 @@ export class HaFilterStates extends LitElement {
   // A plain list of ids is still accepted
   @property({ attribute: false }) public value?: string[] | ListFilterValue;
 
-  @property({ attribute: false }) public states?: FilterStateItem[];
+  @property({ attribute: false }) public states?: FilterStateOption[];
 
   @property({ type: Boolean }) public narrow = false;
 
@@ -111,10 +94,10 @@ export class HaFilterStates extends LitElement {
           ${this.label}
           ${
             this._count
-              ? html`${renderFilterBadge(this._localize, this._count, this._listValue?.exclude, this._listValue?.all)}
+              ? html`${renderFilterBadge(this._i18n.localize, this._count, this._listValue?.exclude, this._listValue?.all)}
                   <ha-icon-button
                     .path=${mdiFilterVariantRemove}
-                    .label=${this._localize(
+                    .label=${this._i18n.localize(
                       "ui.components.subpage-data-table.clear_filter"
                     )}
                     @click=${this._clearFilter}
@@ -157,10 +140,29 @@ export class HaFilterStates extends LitElement {
                         </ha-list-item-option>`
                       : nothing
                   }
-                  ${this.states.map((item) =>
-                    isPair(item)
-                      ? this._renderPair(item)
-                      : this._renderOption(item)
+                  ${this.states.map(
+                    (item) =>
+                      html`<ha-list-item-option
+                        appearance="checkbox"
+                        selection-position="end"
+                        .value=${item.value}
+                        .selected=${this._listValue?.ids?.includes(item.value) ?? false}
+                      >
+                        ${
+                          item.iconPath
+                            ? html`<ha-svg-icon
+                                slot="start"
+                                .path=${item.iconPath}
+                              ></ha-svg-icon>`
+                            : item.icon
+                              ? html`<ha-icon
+                                  slot="start"
+                                  .icon=${item.icon}
+                                ></ha-icon>`
+                              : nothing
+                        }
+                        <span slot="headline">${item.label}</span>
+                      </ha-list-item-option>`
                   )}
                 </ha-list-selectable>
               </div>
@@ -168,57 +170,6 @@ export class HaFilterStates extends LitElement {
           : nothing
       }
     `;
-  }
-
-  private _renderOption(item: FilterStateOption, nested?: { last: boolean }) {
-    return html`<ha-list-item-option
-      appearance="checkbox"
-      selection-position="end"
-      class=${nested ? "nested" : ""}
-      .value=${item.value}
-      .selected=${this._listValue?.ids?.includes(item.value) ?? false}
-    >
-      ${
-        nested
-          ? html`<ha-tree-indicator
-              slot="start"
-              .end=${nested.last}
-            ></ha-tree-indicator>`
-          : nothing
-      }
-      ${this._renderIcon(item)}
-      <span slot="headline">${item.label}</span>
-    </ha-list-item-option>`;
-  }
-
-  private _renderPair(pair: FilterStatePair) {
-    const picked = pair.options.filter((option) =>
-      this._listValue?.ids?.includes(option.value)
-    ).length;
-    return html`<ha-list-item-option
-        appearance="checkbox"
-        selection-position="end"
-        .value=${pair.value}
-        .selected=${picked === pair.options.length}
-        .indeterminate=${picked > 0 && picked < pair.options.length}
-        .disabled=${!!this._listValue?.all}
-      >
-        ${this._renderIcon(pair)}
-        <span slot="headline">${pair.label}</span>
-      </ha-list-item-option>
-      ${pair.options.map((option, index) =>
-        this._renderOption(option, {
-          last: index === pair.options.length - 1,
-        })
-      )}`;
-  }
-
-  private _renderIcon(item: { icon?: string; iconPath?: string }) {
-    return item.iconPath
-      ? html`<ha-svg-icon slot="start" .path=${item.iconPath}></ha-svg-icon>`
-      : item.icon
-        ? html`<ha-icon slot="start" .icon=${item.icon}></ha-icon>`
-        : nothing;
   }
 
   private get _listValue(): ListFilterValue | undefined {
@@ -243,18 +194,7 @@ export class HaFilterStates extends LitElement {
   }
 
   private _matchChanged(ev: CustomEvent<{ all: boolean }>) {
-    let value = setListFilterAll(this._listValue, ev.detail.all);
-    // Matching all can't have both options of a pair, so keep the first one
-    if (value.all) {
-      const opposites = (this.states ?? [])
-        .filter(isPair)
-        .filter((pair) =>
-          pair.options.every((opt) => value.ids?.includes(opt.value))
-        )
-        .map((pair) => pair.options[1].value);
-      value = toggleListFilterIds(value, opposites, false);
-    }
-    this._setValue(value);
+    this._setValue(setListFilterAll(this._listValue, ev.detail.all));
   }
 
   private _expandedChanged(ev) {
@@ -272,31 +212,11 @@ export class HaFilterStates extends LitElement {
     }
 
     const selected = ev.type === "ha-list-item-selected";
-    if (option === NO_VALUE_ID) {
-      this._setValue(toggleListFilterNone(this._listValue, selected));
-      return;
-    }
-
-    const pairs = (this.states ?? []).filter(isPair);
-    // A pair row ticks or unticks both of its options
-    const pair = pairs.find((item) => item.value === option);
-    let value = toggleListFilterIds(
-      this._listValue,
-      pair ? pair.options.map((item) => item.value) : [option],
-      selected
+    this._setValue(
+      option === NO_VALUE_ID
+        ? toggleListFilterNone(this._listValue, selected)
+        : toggleListFilterIds(this._listValue, [option], selected)
     );
-
-    // An item can't have both options of a pair, so while matching all,
-    // ticking one unticks the other
-    if (selected && value.all && !pair) {
-      const opposite = pairs
-        .find((item) => item.options.some((opt) => opt.value === option))
-        ?.options.find((opt) => opt.value !== option);
-      if (opposite) {
-        value = toggleListFilterIds(value, [opposite.value], false);
-      }
-    }
-    this._setValue(value);
   }
 
   private _clearFilter(ev) {
@@ -321,19 +241,6 @@ export class HaFilterStates extends LitElement {
         ha-list-selectable::part(base) {
           flex: 1;
           min-height: 0;
-        }
-        /* Options of a pair sit under it, like areas under their floor */
-        .nested::part(base) {
-          padding-inline-start: 48px;
-        }
-        ha-tree-indicator {
-          width: 56px;
-          position: absolute;
-          top: 0px;
-          inset-inline-start: 0px;
-        }
-        ha-tree-indicator:dir(rtl) {
-          transform: scaleX(-1);
         }
         .header {
           display: flex;

@@ -19,6 +19,10 @@ import type {
   ListFilterValue,
 } from "../../../data/data_table_filters";
 import { isExcludeFilter } from "../../../data/data_table_filters";
+import {
+  inIntegrationCategory,
+  integrationCategoryName,
+} from "../../../data/integration_category";
 import type { RepositoryBase } from "../../../data/marketplace/repository";
 import type { HomeAssistant } from "../../../types";
 import type { MarketplaceTab } from "./ha-marketplace-dashboard";
@@ -52,6 +56,9 @@ export type ExcludableRepositoryFilter =
 
 const EXCLUDABLE_FILTERS: readonly string[] = [STATUS_FILTER, TYPE_FILTER];
 
+// Like `energy`, which takes in its subcategories, or `energy.solar`
+export const INTEGRATION_CATEGORY_FILTER = "integration_category";
+
 // Where a repository comes from, the community catalog or added from a link
 export const SOURCE_ORDER = ["catalog", "custom"] as const;
 
@@ -67,6 +74,7 @@ export type RepositoryFilters = Partial<
     | typeof STATUS_FILTER
     | typeof TYPE_FILTER
     | typeof SOURCE_FILTER
+    | typeof INTEGRATION_CATEGORY_FILTER
     | typeof EXCLUDE_FILTER,
     string[]
   >
@@ -77,9 +85,12 @@ export type RepositoryFilters = Partial<
  * filter button. Which panes exclude is how they match, not a filter.
  */
 export const countRepositoryFilters = (filters: RepositoryFilters): number =>
-  [STATUS_FILTER, TYPE_FILTER, SOURCE_FILTER].filter(
-    (name) => filters[name]?.length
-  ).length;
+  [
+    STATUS_FILTER,
+    TYPE_FILTER,
+    SOURCE_FILTER,
+    INTEGRATION_CATEGORY_FILTER,
+  ].filter((name) => filters[name]?.length).length;
 
 /** The value of a filter pane, with whether it excludes its selection. */
 export const repositoryFilterValue = (
@@ -254,6 +265,17 @@ const matchesFilters = (
     return false;
   }
 
+  const integrationCategories = filters[INTEGRATION_CATEGORY_FILTER];
+
+  if (
+    integrationCategories?.length &&
+    !integrationCategories.some((slug) =>
+      inIntegrationCategory(repository.integration_categories, slug)
+    )
+  ) {
+    return false;
+  }
+
   return true;
 };
 
@@ -295,6 +317,13 @@ export const filterRepositories = (
       translated_source: localize(
         `ui.panel.marketplace.repository_source.${repositorySource(repository)}`
       ),
+      // Ones this Home Assistant doesn't know are left out
+      translated_integration_categories: (
+        repository.integration_categories ?? []
+      )
+        .map((slug) => integrationCategoryName(localize, slug))
+        .filter(Boolean)
+        .join(", "),
       // A date as text or 0 without one, only numbers sort among each other
       last_updated_timestamp: timestamp(repository.last_updated),
     }));
@@ -361,6 +390,8 @@ export const browseLinkFromUrl = (
       [EXCLUDE_FILTER]: lists.exclude?.filter((name) =>
         EXCLUDABLE_FILTERS.includes(name)
       ),
+      [INTEGRATION_CATEGORY_FILTER]:
+        lists.integration_category?.filter(Boolean),
     },
   };
 };

@@ -13,6 +13,7 @@ export const marketplaceFilterQueryParamConfig = {
     "status",
     "type",
     "source",
+    "integration_category",
     // The filters that show the repositories that don't match their selection
     "exclude",
   ],
